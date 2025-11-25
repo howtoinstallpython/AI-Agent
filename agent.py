@@ -2,14 +2,13 @@ import os
 import asyncio
 from langchain_google_genai import ChatGoogleGenerativeAI
 from pydantic import ConfigDict
-
-# --- UPDATED IMPORTS FOR DEV VERSION ---
-# The class locations changed in the latest update. 
-# We now import directly from the root package.
-from browser_use import Agent, Browser, BrowserConfig
+from browser_use_sdk import AsyncBrowserUse
 
 # --- CONFIGURATION ---
-os.environ["GOOGLE_API_KEY"] = "AIzaSyC5cncyqaWgE_pvogTR4Soihcbv7Cc6et8"
+if "GOOGLE_API_KEY" not in os.environ:
+    raise ValueError("GOOGLE_API_KEY environment variable not set")
+if "BROWSER_USE_API_KEY" not in os.environ:
+    raise ValueError("BROWSER_USE_API_KEY environment variable not set")
 
 # --- THE FIX: PERMISSIVE WRAPPER v3 (Must Keep!) ---
 class PermissiveGemini(ChatGoogleGenerativeAI):
@@ -23,38 +22,25 @@ class PermissiveGemini(ChatGoogleGenerativeAI):
 async def main():
     # We use gemini-1.5-flash as it is faster and often stricter with JSON
     llm = PermissiveGemini(model="gemini-1.5-flash")
-
-    # Initialize Browser
-    # We set headless=False so you can watch the agent work
-    browser = Browser(
-        config=BrowserConfig(
-            headless=False,
-        )
-    )
-
-    # Agent Definition
-    agent = Agent(
-        task="Go to google.com, type 'AAPL stock price' into the search bar, and tell me the current price.",
-        llm=llm,
-        browser=browser,
-    )
-
-    print(">> Agent Initialized. Starting task...")
+    client = AsyncBrowserUse(api_key=os.environ["BROWSER_USE_API_KEY"])
     
     try:
-        # Run the agent
-        history = await agent.run()
-        
+        task = await client.tasks.create_task(
+            task="Go to google.com, type 'AAPL stock price' into the search bar, and tell me the current price.",
+            llm=llm,
+        )
+        print(">> Agent Initialized. Starting task...")
+        result = await task.complete()
         print("\n>> Task Complete!")
-        print(history.final_result())
+        print(result.output)
         
     except Exception as e:
         print(f"\n>> CRITICAL ERROR: {e}")
         import traceback
         traceback.print_exc()
     finally:
-        # Always close the browser cleanly
-        await browser.close()
+        # The new SDK handles browser cleanup automatically, so no need to close the browser manually.
+        pass
 
 if __name__ == "__main__":
     asyncio.run(main())
